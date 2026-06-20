@@ -1,0 +1,8 @@
+---
+# Namespace the operator's controller-manager and its supporting RBAC live in.
+# namePrefix=kagent-ls- in kustomization.yaml means all resources in this
+# overlay land in `kagent-ls-system`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: system

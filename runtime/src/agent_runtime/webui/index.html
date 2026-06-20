@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>kagent-ls · 集群助手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/styles/github.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.10.0/lib/languages/bash.min.js"></script>
+  <script>
+    // Configure marked: GFM tables, line breaks, no dangerous HTML
+    marked.setOptions({ breaks: true, gfm: true });
+    hljs.registerLanguage('yaml', hljsLib => window.hljs?.languages?.yaml);
+  </script>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; }
+    .prose { line-height: 1.6; }
+    .prose p { margin: 0.5em 0; }
+    .prose p:first-child { margin-top: 0; }
+    .prose p:last-child { margin-bottom: 0; }
+    .prose pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 0.5em 0; }
+    .prose pre code { background: transparent; padding: 0; font-size: 0.85em; }
+    .prose code:not(pre code) { background: rgba(175,184,193,0.2); padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+    .prose table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; }
+    .prose th, .prose td { border: 1px solid #d0d7de; padding: 4px 10px; text-align: left; }
+    .prose th { background: #f6f8fa; font-weight: 600; }
+    .prose tr:nth-child(2n) { background: #f6f8fa; }
+    .prose a { color: #0969da; text-decoration: none; }
+    .prose a:hover { text-decoration: underline; }
+    .prose ul, .prose ol { margin: 0.5em 0; padding-left: 1.5em; }
+    .prose li { margin: 0.2em 0; }
+    .prose h1, .prose h2, .prose h3 { font-weight: 600; margin: 0.8em 0 0.4em; }
+    .prose blockquote { border-left: 3px solid #d0d7de; padding-left: 1em; color: #57606a; margin: 0.5em 0; }
+
+    .typing-dot { display: inline-block; width: 7px; height: 7px; background: #6b7280; border-radius: 50%; margin: 0 2px; animation: blink 1.4s infinite both; }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes blink { 0%, 60%, 100% { opacity: 0.25; } 30% { opacity: 1; } }
+
+    .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    /* pulse for in-flight tool call */
+    .tool-panel { transition: background 0.3s; }
+    .tool-panel.streaming { background: #eff6ff; }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col">
+
+  <header class="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shadow-sm flex-shrink-0">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">k8s</div>
+      <div>
+        <h1 class="text-base font-semibold text-gray-900">kagent-ls · 集群助手</h1>
+        <p class="text-xs text-gray-500" id="endpoint-display">…</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="session-badge" class="text-xs px-2 py-0.5 rounded-full font-mono bg-gray-100 text-gray-500" title="当前会话 id（用于服务端持久化）">…</span>
+      <button id="btn-new-session" class="text-xs px-3 py-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition" title="开始新会话（旧的会话记录会保留在服务端）">新会话</button>
+      <button id="btn-clear" class="text-xs px-3 py-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition">清空对话</button>
+      <button id="btn-settings" class="text-xs px-3 py-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition">⚙️ 设置</button>
+    </div>
+  </header>
+
+  <div id="messages" class="flex-1 overflow-y-auto scrollbar-thin px-4 py-6">
+    <div id="empty-state" class="text-center text-gray-400 mt-16 max-w-2xl mx-auto px-6">
+      <div class="text-5xl mb-4">👋</div>
+      <p class="text-lg font-medium text-gray-600 mb-2">有什么可以帮你的？</p>
+      <p class="text-sm text-gray-500 mb-6">我是你的 K8s 集群排错助手，会调用工具查询真实状态后回答你。</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-left">
+        <button class="suggest-btn p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm text-sm text-gray-700 transition">集群有几个 node？</button>
+        <button class="suggest-btn p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm text-sm text-gray-700 transition">列出 default 命名空间的 pod</button>
+        <button class="suggest-btn p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm text-sm text-gray-700 transition">看一下 kube-system 最近的 event</button>
+        <button class="suggest-btn p-3 bg-white border border-gray-200 rounded-lg hover:border-blue-400 hover:shadow-sm text-sm text-gray-700 transition">describe_pod 看看 coredns</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="border-t border-gray-200 bg-white px-4 py-3 flex-shrink-0">
+    <div class="max-w-3xl mx-auto flex gap-2 items-end">
+      <textarea id="input" rows="1" placeholder="输入你的问题，Cmd/Ctrl + Enter 发送"
+        class="flex-1 resize-none border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent max-h-32 leading-relaxed"></textarea>
+      <button id="btn-send" class="bg-blue-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition flex-shrink-0">发送</button>
+    </div>
+    <div class="max-w-3xl mx-auto mt-2 flex items-center gap-2 text-xs text-gray-500">
+      <span>将路由到:</span>
+      <span id="agent-badge" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono font-semibold bg-gray-100 text-gray-600">…</span>
+      <span class="text-gray-400">（按你的输入自动判断：含重启 / 扩缩 / 删除等动作走 ops，其他走 cluster）</span>
+    </div>
+    <div class="max-w-3xl mx-auto mt-1 flex items-center gap-2 text-xs text-gray-400">
+      <span>服务端历史：</span>
+      <span id="session-persistence" class="font-mono">未启用</span>
+    </div>
+  </div>
+
+  <div id="settings-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+    <div class="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+      <h2 class="text-lg font-semibold mb-4">设置</h2>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">API 端点</label>
+          <input id="cfg-endpoint" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm font-mono" placeholder="http://localhost:8080">
+          <p class="text-xs text-gray-500 mt-1">OpenAI 兼容的 <code>/chat/completions</code> 端点</p>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">模型</label>
+          <input id="cfg-model" type="text" class="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm" placeholder="MiniMax-M3">
+        </div>
+        <div class="flex items-center pt-1">
+          <input id="cfg-stream" type="checkbox" checked class="mr-2 w-4 h-4">
+          <label for="cfg-stream" class="text-sm text-gray-700">流式响应（SSE）</label>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 mt-6">
+        <button id="btn-cancel-settings" class="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-md">取消</button>
+        <button id="btn-save-settings" class="px-4 py-1.5 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === storage keys ===
+    const STORAGE_MESSAGES = 'kagent-ls.chat.v1.messages';
+    const STORAGE_SETTINGS = 'kagent-ls.chat.v1.settings';
+    const STORAGE_SESSION = 'kagent-ls.chat.v1.session';
+
+    // Hard cap on the in-memory messages array. A long streaming session
+    // can otherwise push dozens of tool_call/tool_result events without
+    // ever calling saveMessages(); without an in-memory cap the array
+    // grows unbounded across page lifetime. All call sites must use
+    // pushMessage() rather than messages.push() directly.
+    const MAX_MESSAGES = 200;
+
+    const defaultSettings = {
+      endpoint: window.location.origin || 'http://localhost:8080',
+      model: 'MiniMax-M3',
+      stream: true,
+    };
+
+    // Agent the UI is currently routing to. Updated after each /classify call
+    // so the user can see which agent handled their last message.
+    let currentAgent = 'cluster';
+
+    // session_id: identifies this conversation in server-side history
+    // (when the runtime has a PVC mounted). Generated lazily on first
+    // load, persisted in localStorage, and regenerable via the "新会话"
+    // button. Sent with every /chat/completions call.
+    let sessionId = loadSessionId();
+    function loadSessionId() {
+      let s = localStorage.getItem(STORAGE_SESSION);
+      if (!s) {
+        s = 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem(STORAGE_SESSION, s);
+      }
+      return s;
+    }
+    function newSessionId() {
+      const s = 'sess-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      localStorage.setItem(STORAGE_SESSION, s);
+      return s;
+    }
+
+    let settings = loadSettings();
+    let messages = loadMessages();
+    let busy = false;
+    let currentAssistantEl = null;  // ref to in-flight assistant bubble (for streaming)
+
+    // === DOM ===
+    const $messages = document.getElementById('messages');
+    const $empty = document.getElementById('empty-state');
+    const $input = document.getElementById('input');
+    const $send = document.getElementById('btn-send');
+    const $clear = document.getElementById('btn-clear');
+    const $settings = document.getElementById('btn-settings');
+    const $modal = document.getElementById('settings-modal');
+    const $cancelSettings = document.getElementById('btn-cancel-settings');
+    const $saveSettings = document.getElementById('btn-save-settings');
+    const $cfgEndpoint = document.getElementById('cfg-endpoint');
+    const $cfgModel = document.getElementById('cfg-model');
+    const $cfgStream = document.getElementById('cfg-stream');
+    const $endpointDisplay = document.getElementById('endpoint-display');
+    const $agentBadge = document.getElementById('agent-badge');
+    const $sessionBadge = document.getElementById('session-badge');
+    const $newSession = document.getElementById('btn-new-session');
+
+    // === storage ===
+    function loadSettings() {
+      try { return { ...defaultSettings, ...JSON.parse(localStorage.getItem(STORAGE_SETTINGS) || '{}') }; }
+      catch { return { ...defaultSettings }; }
+    }
+    function saveSettings() { localStorage.setItem(STORAGE_SETTINGS, JSON.stringify(settings)); }
+    function loadMessages() {
+      try { const m = JSON.parse(localStorage.getItem(STORAGE_MESSAGES) || '[]'); return Array.isArray(m) ? m : []; }
+      catch { return []; }
+    }
+    function saveMessages() {
+      // Belt-and-braces cap: pushMessage() already trims in-memory, but
+      // a recovered session from /sessions/{id} could be larger than
+      // MAX_MESSAGES, and we don't want to write a giant blob to
+      // localStorage either way.
+      const capped = messages.slice(-MAX_MESSAGES);
+      localStorage.setItem(STORAGE_MESSAGES, JSON.stringify(capped));
+    }
+
+    // pushMessage appends to `messages` and trims oldest entries when
+    // the cap is exceeded. Use this instead of messages.push() at every
+    // call site so the in-memory array stays bounded during long
+    // streaming sessions (tool events can fire dozens of times per turn).
+    function pushMessage(m) {
+      messages.push(m);
+      if (messages.length > MAX_MESSAGES) {
+        messages.splice(0, messages.length - MAX_MESSAGES);
+      }
+    }
+
+    // === utility ===
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function renderMarkdown(text) {
+      if (!text) return '';
+      const html = marked.parse(text, { breaks: true, gfm: true });
+      return DOMPurify.sanitize(html);
+    }
+
+    // === renderers ===
+    function renderMessage(msg) {
+      if (msg.role === 'tool_call' || msg.role === 'tool_result') return renderToolEvent(msg);
+      if (msg.role === 'error') return renderError(msg.content);
+      if (msg.role === 'user') return renderUser(msg.content);
+      if (msg.role === 'assistant') return renderAssistant(msg.content, false);
+      return null;
+    }
+
+    function renderUser(text) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-end mb-4';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-3xl rounded-2xl rounded-br-md px-4 py-2.5 bg-blue-600 text-white text-sm whitespace-pre-wrap break-words';
+      bubble.textContent = text;
+      div.appendChild(bubble);
+      return div;
+    }
+
+    function renderAssistant(text, isLive) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-start mb-4';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-3xl rounded-2xl rounded-bl-md px-4 py-2.5 bg-white border border-gray-200 text-gray-900 text-sm prose prose-sm max-w-none' + (isLive ? ' assistant-live' : '');
+      if (text) {
+        bubble.innerHTML = renderMarkdown(text);
+        bubble.querySelectorAll('pre code').forEach(block => { try { window.hljs?.highlightElement(block); } catch {} });
+      }
+      div.appendChild(bubble);
+      return div;
+    }
+
+    function renderError(text) {
+      const div = document.createElement('div');
+      div.className = 'flex justify-start mb-4';
+      const bubble = document.createElement('div');
+      bubble.className = 'max-w-3xl rounded-2xl px-4 py-2.5 bg-red-50 border border-red-200 text-red-700 text-sm';
+      bubble.textContent = '⚠️ ' + text;
+      div.appendChild(bubble);
+      return div;
+    }
+
+    function renderToolEvent(msg) {
+      const isCall = msg.role === 'tool_call';
+      const div = document.createElement('div');
+      div.className = 'flex justify-start mb-2 ml-1';
+      const panel = document.createElement('div');
+      panel.className = 'tool-panel bg-gray-50 border border-gray-200 rounded-lg overflow-hidden text-xs max-w-2xl w-full';
+
+      const header = document.createElement('button');
+      header.type = 'button';
+      header.className = 'w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-100 text-left';
+      header.innerHTML = `
+        <span class="text-gray-400">${isCall ? '🔧' : '📥'}</span>
+        <span class="text-gray-500">${isCall ? '调用' : '结果'}</span>
+        <span class="font-mono font-semibold text-blue-700">${escapeHtml(msg.name)}</span>
+        <span class="text-gray-400 ml-auto">▾</span>
+      `;
+      const body = document.createElement('div');
+      body.className = 'hidden px-3 py-2 border-t border-gray-200 bg-white';
+      const pre = document.createElement('pre');
+      pre.className = 'text-xs whitespace-pre-wrap break-all font-mono';
+      const code = document.createElement('code');
+      if (isCall) {
+        code.textContent = JSON.stringify(msg.args ?? {}, null, 2);
+      } else {
+        code.textContent = String(msg.result ?? '');
+      }
+      pre.appendChild(code);
+      body.appendChild(pre);
+      header.addEventListener('click', () => {
+        body.classList.toggle('hidden');
+        header.querySelector('span:last-child').textContent = body.classList.contains('hidden') ? '▾' : '▴';
+      });
+      panel.appendChild(header);
+      panel.appendChild(body);
+      div.appendChild(panel);
+      return div;
+    }
+
+    function renderTyping() {
+      const div = document.createElement('div');
+      div.id = 'typing-indicator';
+      div.className = 'flex justify-start mb-4';
+      div.innerHTML = `
+        <div class="bg-white border border-gray-200 rounded-2xl rounded-bl-md px-4 py-3">
+          <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
+        </div>
+      `;
+      return div;
+    }
+
+    function renderAll() {
+      $messages.innerHTML = '';
+      if (messages.length === 0) {
+        $empty.classList.remove('hidden');
+        $messages.appendChild($empty);
+        return;
+      }
+      $empty.classList.add('hidden');
+      for (const m of messages) {
+        const el = renderMessage(m);
+        if (el) $messages.appendChild(el);
+      }
+      scrollToBottom();
+    }
+
+    function scrollToBottom() {
+      requestAnimationFrame(() => { $messages.scrollTop = $messages.scrollHeight; });
+    }
+
+    // === send ===
+    // Build the message list we send to the server. The server's schema
+    // only accepts roles: system, user, assistant, tool — so we must filter
+    // out our internal tool_call / tool_result / error entries (which are
+    // kept in `messages` for UI display only).
+    function chatHistoryForServer() {
+      return messages
+        .filter(m => m.role === 'user' || m.role === 'assistant' || m.role === 'system')
+        .map(m => ({ role: m.role, content: m.content }));
+    }
+
+    async function send() {
+      const text = $input.value.trim();
+      if (!text || busy) return;
+      busy = true;
+      $send.disabled = true;
+      $send.textContent = '...';
+
+      // Add user message
+      const userMsg = { role: 'user', content: text };
+      pushMessage(userMsg);
+      saveMessages();
+      $messages.appendChild(renderUser(text));
+      $input.value = '';
+      autoResize();
+      scrollToBottom();
+
+      // Classify intent and pick the agent BEFORE talking to the LLM.
+      // /classify is a lightweight single-turn call (~50 tokens) that returns
+      // {intent, agent}; we default to `cluster` (read-only, safe) on any
+      // failure so a broken classifier can never accidentally escalate to
+      // write permissions.
+      let agent = 'cluster';
+      try {
+        const resp = await fetch(`${settings.endpoint}/classify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          agent = data.agent || 'cluster';
+        }
+      } catch {
+        // Network error — keep `cluster` default.
+      }
+      currentAgent = agent;
+      refreshAgentBadge();
+
+      // Typing indicator
+      const typing = renderTyping();
+      $messages.appendChild(typing);
+      scrollToBottom();
+
+      // Track in-flight events
+      const toolEvents = [];
+      let assistantContent = '';
+      let errored = false;
+
+      try {
+        if (settings.stream) {
+          await streamChat(toolEvents, txt => { assistantContent = txt; }, () => { errored = true; }, agent);
+        } else {
+          await nonStreamChat(toolEvents, txt => { assistantContent = txt; }, () => { errored = true; }, agent);
+        }
+      } catch (err) {
+        pushMessage({ role: 'error', content: String(err.message || err) });
+        errored = true;
+      }
+
+      // Persist final state
+      typing.remove();
+      currentAssistantEl = null;
+      if (!errored) {
+        const finalContent = assistantContent || '（模型没有返回内容）';
+        pushMessage({ role: 'assistant', content: finalContent });
+      }
+      saveMessages();
+      renderAll();
+
+      busy = false;
+      $send.disabled = false;
+      $send.textContent = '发送';
+    }
+
+    async function nonStreamChat(toolEvents, setAssistant, setError, agent) {
+      const response = await fetch(`${settings.endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.model,
+          stream: false,
+          agent: agent,
+          session_id: sessionId,
+          messages: chatHistoryForServer(),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        setError(); throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+      const data = await response.json();
+      setAssistant(data.answer || '');
+      for (const tc of data.tool_calls || []) {
+        const tm = { role: 'tool_call', name: tc.name, args: tc.args };
+        toolEvents.push(tm);
+        pushMessage(tm);
+        $messages.appendChild(renderToolEvent(tm));
+      }
+      for (const tr of data.tool_results || []) {
+        const tm = { role: 'tool_result', name: tr.name, result: tr.result };
+        toolEvents.push(tm);
+        pushMessage(tm);
+        $messages.appendChild(renderToolEvent(tm));
+      }
+    }
+
+    async function streamChat(toolEvents, setAssistant, setError, agent) {
+      const response = await fetch(`${settings.endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: settings.model,
+          stream: true,
+          agent: agent,
+          session_id: sessionId,
+          messages: chatHistoryForServer(),
+        }),
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        setError(); throw new Error(`HTTP ${response.status}: ${errText}`);
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let liveAssistant = null;  // for incremental answer rendering
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (payload === '[DONE]') continue;
+          let event;
+          try { event = JSON.parse(payload); } catch { continue; }
+          if (event.type === 'tool_call') {
+            // remove typing, render inline
+            document.getElementById('typing-indicator')?.remove();
+            const tm = { role: 'tool_call', name: event.name, args: event.args };
+            toolEvents.push(tm); pushMessage(tm);
+            $messages.appendChild(renderToolEvent(tm));
+          } else if (event.type === 'tool_result') {
+            const tm = { role: 'tool_result', name: event.name, result: event.result };
+            toolEvents.push(tm); pushMessage(tm);
+            $messages.appendChild(renderToolEvent(tm));
+          } else if (event.type === 'done') {
+            setAssistant(event.answer || '');
+            // Render the final assistant message (it's already in assistantContent)
+            if (liveAssistant) { liveAssistant.remove(); liveAssistant = null; }
+          } else if (event.type === 'error') {
+            setError(); throw new Error(event.error);
+          }
+          scrollToBottom();
+        }
+      }
+    }
+
+    // === UI wiring ===
+    function autoResize() {
+      $input.style.height = 'auto';
+      $input.style.height = Math.min($input.scrollHeight, 128) + 'px';
+    }
+    function refreshEndpointDisplay() {
+      $endpointDisplay.textContent = settings.endpoint + ' · ' + settings.model;
+    }
+    function refreshAgentBadge() {
+      if (currentAgent === 'ops') {
+        $agentBadge.textContent = '🔧 ops';
+        $agentBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono font-semibold bg-amber-100 text-amber-800';
+      } else {
+        $agentBadge.textContent = '👁 cluster';
+        $agentBadge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-mono font-semibold bg-gray-100 text-gray-600';
+      }
+    }
+    function refreshSessionBadge() {
+      $sessionBadge.textContent = sessionId;
+    }
+    function refreshPersistenceBadge(enabled) {
+      const el = document.getElementById('session-persistence');
+      if (!el) return;
+      if (enabled === true) {
+        el.textContent = '已启用（PVC）';
+        el.className = 'font-mono text-green-600';
+      } else if (enabled === false) {
+        el.textContent = '未启用（服务端无 PVC）';
+        el.className = 'font-mono text-gray-400';
+      } else {
+        el.textContent = '检测中…';
+        el.className = 'font-mono text-gray-400';
+      }
+    }
+
+    // Try to recover server-side history for this session id (best
+    // effort — silently no-op when the runtime has no PVC mounted or
+    // the session is unknown). We only adopt server-side state when
+    // localStorage is empty (i.e. the user has no client-side state
+    // yet); otherwise the client wins, and a "新会话" click is the
+    // way to start fresh. Also reports whether persistence is enabled
+    // (so the user knows their conversation is durable).
+    async function tryRecoverServerHistory() {
+      let resp;
+      try {
+        resp = await fetch(`${settings.endpoint}/sessions/${encodeURIComponent(sessionId)}`);
+      } catch {
+        refreshPersistenceBadge(null);
+        return;
+      }
+      if (resp.status === 503) {
+        refreshPersistenceBadge(false);
+        return;
+      }
+      if (!resp.ok) {
+        refreshPersistenceBadge(null);
+        return;
+      }
+      refreshPersistenceBadge(true);
+      if (messages.length > 0) return;
+      try {
+        const data = await resp.json();
+        const recovered = (data.messages || [])
+          .filter(m => m && (m.role === 'user' || m.role === 'assistant' || m.role === 'system'))
+          .map(m => ({ role: m.role, content: m.content }));
+        if (recovered.length === 0) return;
+        messages = recovered;
+        saveMessages();
+        renderAll();
+      } catch {
+        // Malformed body — just leave the client state empty.
+      }
+    }
+
+    $input.addEventListener('input', autoResize);
+    $input.addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); send(); }
+    });
+    $send.addEventListener('click', send);
+    $newSession.addEventListener('click', () => {
+      if (messages.length > 0 && !confirm('开始新会话？当前对话会保留在服务端，但本端 UI 会被清空。')) return;
+      sessionId = newSessionId();
+      messages = []; saveMessages(); renderAll();
+      refreshSessionBadge();
+    });
+    $clear.addEventListener('click', () => {
+      if (messages.length === 0) return;
+      if (!confirm('清空本端对话？（服务端的历史记录不受影响）')) return;
+      messages = []; saveMessages(); renderAll();
+    });
+    $settings.addEventListener('click', () => {
+      $cfgEndpoint.value = settings.endpoint;
+      $cfgModel.value = settings.model;
+      $cfgStream.checked = settings.stream;
+      $modal.classList.remove('hidden');
+    });
+    $cancelSettings.addEventListener('click', () => $modal.classList.add('hidden'));
+    $saveSettings.addEventListener('click', () => {
+      settings.endpoint = $cfgEndpoint.value.trim() || defaultSettings.endpoint;
+      settings.model = $cfgModel.value.trim() || defaultSettings.model;
+      settings.stream = $cfgStream.checked;
+      saveSettings();
+      refreshEndpointDisplay();
+      $modal.classList.add('hidden');
+    });
+    $modal.addEventListener('click', e => { if (e.target === $modal) $modal.classList.add('hidden'); });
+
+    // Suggestion chips
+    document.querySelectorAll('.suggest-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        $input.value = btn.textContent;
+        autoResize();
+        send();
+      });
+    });
+
+    // init
+    refreshEndpointDisplay();
+    refreshAgentBadge();
+    refreshSessionBadge();
+    refreshPersistenceBadge(null);
+    renderAll();
+    tryRecoverServerHistory();
+    $input.focus();
+  </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Ships the operator deployment, RBAC, CRD references, and the read-only
+# RBAC used by the long-running chat runtime.
+resources:
+- namespace.yaml
+- ../crd
+- ../rbac
+- ../manager
+- ../runtime
+namePrefix: kagent-ls-
+labels:
+- includeSelectors: true
+  pairs:
+    app.kubernetes.io/name: kagent-ls
+    app.kubernetes.io/managed-by: kustomize

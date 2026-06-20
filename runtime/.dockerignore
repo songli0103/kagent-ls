@@ -1,0 +1,13 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+.idea
+.vscode
+tests
+Dockerfile
+.dockerignore
+# Keep README.md — hatchling needs it because pyproject.toml references it
+!README.md

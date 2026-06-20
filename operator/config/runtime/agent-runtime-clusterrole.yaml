@@ -1,0 +1,19 @@
+---
+# Read-only cluster role used by the long-running chat runtime.
+# The runtime (running in a Deployment under the `agent-runtime` ServiceAccount)
+# needs to list/get pods, deployments, events, and nodes in order to answer
+# cluster-inspection questions.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-runtime
+rules:
+- apiGroups: [""]
+  resources: ["pods", "pods/log", "events", "nodes", "namespaces", "services"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["batch"]
+  resources: ["jobs", "cronjobs"]
+  verbs: ["get", "list", "watch"]

@@ -1,0 +1,19 @@
+apiVersion: agent.demo.io/v1alpha1
+kind: Agent
+metadata:
+  name: k8s-assistant
+  namespace: default
+spec:
+  # runtime.image 必填：runtime 容器镜像，必须暴露 8080 端口
+  runtime:
+    image: <your-registry>/<your-namespace>/cluster-agent:<tag>
+  # config.namespace 为空时全集群查询；填 ns 名则限定
+  config:
+    namespace: ""
+  # 取消下面注释以开启对应能力（按需）
+  # writeEnabled: true                  # 开启 ops agent 的写工具（重启/扩缩容）
+  # credentialsSecret: minimax-credentials  # 默认就是这个，可以省
+  # history:
+  #   enabled: true
+  #   size: 1Gi
+  #   storageClassName: standard        # 留空走集群 default

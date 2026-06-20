@@ -1,0 +1,236 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+  name: agents.agent.demo.io
+spec:
+  group: agent.demo.io
+  names:
+    kind: Agent
+    listKind: AgentList
+    plural: agents
+    singular: agent
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.observedGeneration
+      name: Generation
+      type: integer
+    - jsonPath: .status.readyReplicas
+      name: Ready
+      type: integer
+    - jsonPath: .status.deploymentRef.name
+      name: Deployment
+      type: string
+    - jsonPath: .status.serviceRef.name
+      name: Service
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Agent is the Schema for the agents API.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentSpec defines the desired state of Agent.
+            properties:
+              config:
+                description: AgentConfigSpec holds optional configuration values consumed
+                  by tools.
+                properties:
+                  namespace:
+                    description: |-
+                      Namespace restricts the inspection scope to a single namespace.
+                      When empty, cluster-wide resources are listed.
+                    type: string
+                type: object
+              credentialsSecret:
+                description: |-
+                  CredentialsSecret is the name of the Secret in the agent's namespace
+                  that carries LLM_API_KEY / LLM_BASE_URL / LLM_MODEL. Its contents
+                  are exposed to the runtime as envFrom. The operator also watches
+                  this Secret and rolls the Deployment when its resourceVersion
+                  changes (so a `kubectl edit secret` is enough to rotate creds).
+                type: string
+              history:
+                description: History turns on PVC-backed chat history persistence.
+                properties:
+                  enabled:
+                    description: Enabled turns persistence on. Defaults to false (stateless
+                      chat).
+                    type: boolean
+                  size:
+                    description: Size is the requested PVC capacity. Defaults to "1Gi"
+                      when empty.
+                    type: string
+                  storageClassName:
+                    description: |-
+                      StorageClassName optionally pins a StorageClass. Empty means the
+                      cluster default.
+                    type: string
+                type: object
+              runtime:
+                description: AgentRuntimeSpec defines the container runtime used to
+                  execute the task.
+                properties:
+                  image:
+                    description: |-
+                      Image is the container image that the Operator will run inside the
+                      Deployment. The image must expose an HTTP server on port 8080.
+                    type: string
+                required:
+                - image
+                type: object
+              task:
+                description: |-
+                  AgentTaskSpec describes the task the agent should perform.
+
+                  In the long-running chat service mode (the default since v0.2) the
+                  runtime ignores these fields; the chat is driven by HTTP requests to
+                  /chat/completions on the runtime container. The fields are kept for
+                  backward compatibility with existing Agent CRs.
+                properties:
+                  args:
+                    additionalProperties:
+                      type: string
+                    description: Args are tool-specific parameters. Ignored in chat
+                      mode.
+                    type: object
+                  messages:
+                    description: |-
+                      Messages is a multi-turn chat history. Ignored in chat mode (chat is
+                      driven by HTTP requests to the runtime).
+                    items:
+                      description: AgentMessage is one entry in a multi-turn chat
+                        history.
+                      properties:
+                        content:
+                          type: string
+                        role:
+                          type: string
+                      required:
+                      - content
+                      - role
+                      type: object
+                    type: array
+                  prompt:
+                    description: Prompt is a single-turn question. Ignored in chat
+                      mode.
+                    type: string
+                  tool:
+                    description: Tool selects which tool the agent should execute.
+                    enum:
+                    - cluster-inspect
+                    type: string
+                type: object
+              writeEnabled:
+                description: |-
+                  WriteEnabled gates the destructive tools (restart_pod /
+                  restart_deployment / scale_deployment). When true, the operator
+                  binds the per-Agent ServiceAccount to the agent-runtime-write
+                  ClusterRole. Defaults to false (read-only).
+                type: boolean
+            required:
+            - runtime
+            type: object
+          status:
+            description: AgentStatus defines the observed state of Agent.
+            properties:
+              conditions:
+                description: Conditions is a list of observed conditions.
+                items:
+                  description: AgentCondition describes a condition the Agent has
+                    transitioned through.
+                  properties:
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      type: string
+                    reason:
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
+              deploymentRef:
+                description: DeploymentRef is the Deployment running the agent.
+                properties:
+                  name:
+                    type: string
+                type: object
+              finishedAt:
+                description: FinishedAt is unused in chat service mode.
+                format: date-time
+                type: string
+              jobRef:
+                description: JobRef is retained for backward compatibility.
+                properties:
+                  name:
+                    type: string
+                type: object
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the spec generation last processed by the
+                  controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase reports the high-level execution state.
+                type: string
+              readyReplicas:
+                description: ReadyReplicas is the number of pods ready to serve chat
+                  requests.
+                format: int32
+                type: integer
+              result:
+                description: Result is unused in chat service mode.
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              serviceRef:
+                description: ServiceRef is the Service fronting the agent.
+                properties:
+                  name:
+                    type: string
+                type: object
+              startedAt:
+                description: StartedAt is the time the Deployment was first observed
+                  ready.
+                format: date-time
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,18 @@
+---
+# Binds the write `agent-runtime-write` ClusterRole to ANY ServiceAccount
+# named `agent-runtime` in any namespace, mirroring the read binding.
+# The same SA therefore inherits BOTH roles — the read role for the cluster
+# agent, and the write role for the ops agent. Selection between the two is
+# done at request time via the `agent` field, not at the K8s RBAC layer.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-runtime-write
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-runtime-write
+subjects:
+- kind: Group
+  name: system:serviceaccounts
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,4 @@
+# This kustomization.yaml ships the CRD bases that controller-gen produces.
+resources:
+- bases/agent.demo.io_agents.yaml
+# +kubebuilder:scaffold:crdkustomizeresource

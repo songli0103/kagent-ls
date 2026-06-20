@@ -1,0 +1,29 @@
+---
+# Sample Agent CR for the long-running chat mode (v0.2+).
+#
+# Workflow:
+#   1. Create the credentials Secret in the agent's namespace:
+#        kubectl -n default create secret generic minimax-credentials \
+#          --from-literal=LLM_API_KEY=<your-minimax-api-key>
+#      (LLM_BASE_URL and LLM_MODEL default to the MiniMax public endpoint
+#       and the M3 model; only set them if you need to override.)
+#   2. Create the ServiceAccount (one-time per namespace, see
+#      config/runtime/agent-runtime-serviceaccount.yaml).
+#   3. Apply this Agent CR.
+#   4. Wait for `kubectl get agent k8s-assistant -o jsonpath='{.status.phase}'`
+#      to report Ready.
+#   5. `kubectl port-forward -n default svc/k8s-assistant-runtime 8080:8080`
+#      and `curl -X POST http://localhost:8080/chat/completions ...` to chat.
+apiVersion: agent.demo.io/v1alpha1
+kind: Agent
+metadata:
+  name: k8s-assistant
+  namespace: default
+spec:
+  runtime:
+    image: <your-registry>/<your-namespace>/cluster-agent:<tag>
+  # task is ignored in chat mode; the agent is driven by HTTP requests to
+  # /chat/completions on the runtime container. Left here as documentation
+  # of what the runtime used to do in v0.1.
+  config:
+    namespace: ""

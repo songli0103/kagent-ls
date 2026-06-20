@@ -1,0 +1,28 @@
+---
+# Write role used by the OpsAgent. Kept SEPARATE from the read-only
+# `agent-runtime` role so the read flow can be granted without the write
+# surface. The same per-namespace `agent-runtime` ServiceAccount inherits
+# both roles (see agent-runtime-write-binding.yaml), so no CR / operator
+# change is needed to use OpsAgent.
+#
+# Verb scope (intentionally narrower than full admin):
+#   pods/delete                       -> restart_pod (controller recreates)
+#   deployments/patch                 -> restart_deployment (rollout annotation)
+#   deployments/scale patch           -> scale_deployment (scale subresource)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-runtime-write
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "patch"]
+- apiGroups: ["apps"]
+  # `deployments/scale` is a separate RBAC resource from `deployments`.
+  # patch_namespaced_deployment_scale() routes to the /scale subresource,
+  # which the parent `deployments` rule above does NOT cover.
+  resources: ["deployments/scale"]
+  verbs: ["get", "list", "watch", "patch", "update"]

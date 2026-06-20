@@ -1,0 +1,58 @@
+# --- Editor / OS junk ---
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.bak
+*.tmp
+*.orig
+
+# --- Secrets / local config ---
+*.env
+.env
+.env.local
+secrets/
+*.pem
+*.key
+*.kubeconfig
+
+# --- Logs / runtime data ---
+*.log
+logs/
+runtime/history/        # PVC-backed session files (when running locally)
+
+# --- Go (operator) ---
+operator/bin/
+operator/dist/
+operator/testbin/
+operator/coverage.out
+operator/coverage.html
+operator/*.test
+operator/*.out
+
+# --- Python (runtime) ---
+runtime/.venv/
+runtime/__pycache__/
+runtime/**/__pycache__/
+runtime/*.egg-info/
+runtime/build/
+runtime/dist/
+runtime/.pytest_cache/
+runtime/.mypy_cache/
+runtime/.ruff_cache/
+runtime/.uv-cache/
+runtime/htmlcov/
+runtime/.coverage
+
+# --- Build outputs ---
+*.tar
+*.tar.gz
+*.zip
+
+# --- Local practice / scratch (don't push learning projects) ---
+kubebuilder-test/
+kubebuilder_test/
+scratch/
+sandbox/

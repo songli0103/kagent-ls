@@ -1,0 +1,16 @@
+domain: demo.io
+layout:
+- go.kubebuilder.io/v3
+projectName: kagent-ls
+repo: github.com/songli0103/kagent-ls
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: demo.io
+  group: agent
+  kind: Agent
+  path: github.com/songli0103/kagent-ls/api/v1alpha1
+  version: v1alpha1
+version: "3"

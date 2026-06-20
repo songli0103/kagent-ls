@@ -1,0 +1,46 @@
+# Write RBAC for the runtime's OpsAgent.
+#
+# The read-only `agent-runtime` ClusterRole in runtime-rbac.yaml is always
+# applied. This file adds the *destructive* verbs (restart_pod /
+# restart_deployment / scale_deployment) and should only be applied when
+# the Agent CR sets `spec.writeEnabled: true`.
+#
+# Apply:
+#   kubectl apply -f deploy/agent-runtime-write-rbac.yaml
+#
+# The ClusterRoleBinding subject is a Group `system:serviceaccounts` so any
+# ServiceAccount named `agent-runtime` in any namespace inherits this
+# role — same pattern as the read binding.
+
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: agent-runtime-write
+rules:
+# restart_pod: delete a single pod (controller recreates it).
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch", "delete"]
+# restart_deployment: strategic-merge patch the pod template annotation.
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "patch"]
+# scale_deployment: patch the /scale subresource.
+# /scale is a SEPARATE subresource from `deployments`; a rule on
+# `deployments` does NOT cover it.
+- apiGroups: ["apps"]
+  resources: ["deployments/scale"]
+  verbs: ["get", "list", "watch", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-runtime-write
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-runtime-write
+subjects:
+- kind: Group
+  name: system:serviceaccounts
+  apiGroup: rbac.authorization.k8s.io

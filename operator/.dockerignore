@@ -1,0 +1,14 @@
+# More info: https://docs.docker.com/engine/reference/builder/#dockerignore-file
+# Ignore all files which are not go specific
+!**
+!*.go
+!go.mod
+!go.sum
+!**
+# Ugly workaround for https://github.com/moby/moby/issues/22326
+!**/.git
+!**/.gitignore
+!**/.git/**
+!**/.gitignore
+!**/.dockerignore
+!Dockerfile

@@ -1,0 +1,18 @@
+---
+# Binds the agent-runtime ClusterRole to ANY ServiceAccount named
+# `agent-runtime` in any namespace, via the `system:serviceaccounts` group.
+# (Group `system:serviceaccounts:<ns>:<sa>` would require one binding per
+# namespace, which is unmanageable for a per-namespace Agent CR. Binding to
+# the broader group is the standard pattern.)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-runtime
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: agent-runtime
+subjects:
+- kind: Group
+  name: system:serviceaccounts
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,5 @@
+resources:
+- agent-runtime-clusterrole.yaml
+- agent-runtime-binding.yaml
+- agent-runtime-write-clusterrole.yaml
+- agent-runtime-write-binding.yaml

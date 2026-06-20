@@ -1,0 +1,5 @@
+# This patch injects the sidecar container for the kube-rbac-proxy when
+# metrics-secure=true is set on the controller binary.
+- op: add
+  path: /spec/template/spec/containers/0/args/-
+  value: --metrics-secure=false
