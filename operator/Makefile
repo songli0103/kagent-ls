@@ -93,7 +93,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and Conversions
-	$(CONTROLLER_GEN) object generate ./...
+	$(CONTROLLER_GEN) object paths="./..."
 
 .PHONY: test
 test: manifests fmt vet envtest ## Run tests.

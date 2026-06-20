@@ -279,6 +279,31 @@ kubectl apply -f config/crd/bases/agent.demo.io_agents.yaml   # 升级 CRD defin
 # 想强制重读：kubectl delete + apply
 ```
 
+### 同步 deploy/（公共部署清单）
+
+`deploy/` 是给终端用户 `kubectl apply -f` 用的手工副本——`deploy/crd.yaml` 是 `config/crd/bases/agent.demo.io_agents.yaml` 的拷贝，`deploy/operator.yaml` 的 ClusterRole 块来自 `config/rbac/role.yaml`。改了 marker 之后两者都得更新：
+
+```bash
+# 1. 重生 controller-gen 输出
+make manifests     # config/crd/bases/*.yaml + config/rbac/role.yaml
+make generate      # zz_generated.deepcopy.go
+
+# 2. 把生成版同步进 deploy/
+cp config/crd/bases/agent.demo.io_agents.yaml ../deploy/crd.yaml
+
+# ClusterRole：手工把 config/rbac/role.yaml 的 rules 块贴进
+# deploy/operator.yaml 的 kagent-ls-manager-role ClusterRole（注意保留
+# name: kagent-ls-manager-role，不要用生成版的 manager-role）。
+# 其它三块（Namespace / SA / Deployment / RoleBinding）通常不动。
+
+# 3. 校验
+diff -q config/crd/bases/agent.demo.io_agents.yaml ../deploy/crd.yaml    # 应为空
+diff <(awk '/^kind: ClusterRole/,/^---$/' config/rbac/role.yaml | head -n -1) \
+     <(awk '/^kind: ClusterRole/,/^---$/' ../deploy/operator.yaml | head -n -1)  # 只差 name
+```
+
+> 漂移后果：deploy/cluster role 缺规则 → operator CrashLoopBackOff 或 reconcile 一直 forbidden；deploy/crd.yaml 是旧版 → patch Agent CR 时报 `spec.task: Required value`，或 printcolumn 错位。
+
 ## 构建并部署 Operator
 
 ```bash
